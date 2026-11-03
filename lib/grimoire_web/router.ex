@@ -54,6 +54,11 @@ defmodule GrimoireWeb.Router do
       on_mount: [{GrimoireWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+
+      live "/clubs", ClubLive.Index, :index
+      live "/clubs/new", ClubLive.Form, :new
+      live "/clubs/:id", ClubLive.Show, :show
+      live "/clubs/:id/edit", ClubLive.Form, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password
