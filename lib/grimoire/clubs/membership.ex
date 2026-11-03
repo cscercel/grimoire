@@ -3,18 +3,21 @@ defmodule Grimoire.Clubs.Membership do
   import Ecto.Changeset
 
   schema "memberships" do
-    field :role, Ecto.Enum, values: [:owner, :member]
-    field :club_id, :id
-    field :user_id, :id
+    field :role, Ecto.Enum, values: [:owner, :member], default: :member
+
+    belongs_to :user, Grimoire.Accounts.User
+    belongs_to :club, Grimoire.Clubs.Club
 
     timestamps(type: :utc_datetime)
   end
 
   @doc false
-  def changeset(membership, attrs, user_scope) do
+  def changeset(membership, attrs) do
     membership
     |> cast(attrs, [:role])
     |> validate_required([:role])
-    |> put_change(:user_id, user_scope.user.id)
+    |> assoc_constraint(:user)
+    |> assoc_constraint(:club)
+    |> unique_constraint([:user_id, :club_id])
   end
 end
