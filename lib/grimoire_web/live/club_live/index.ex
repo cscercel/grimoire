@@ -26,10 +26,11 @@ defmodule GrimoireWeb.ClubLive.Index do
           <div class="sr-only">
             <.link navigate={~p"/clubs/#{club}"}>Show</.link>
           </div>
-          <.link navigate={~p"/clubs/#{club}/edit"}>Edit</.link>
+          <.link :if={club.id in @owned_ids} navigate={~p"/clubs/#{club}/edit"}>Edit</.link>
         </:action>
         <:action :let={{id, club}}>
           <.link
+            :if={club.id in @owned_ids}
             phx-click={JS.push("delete", value: %{id: club.id}) |> hide("##{id}")}
             data-confirm="Are you sure?"
           >
@@ -46,18 +47,25 @@ defmodule GrimoireWeb.ClubLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Listing Clubs")
-     |> stream(:clubs, list_clubs())}
+     |> assign(:owned_ids, Clubs.owned_club_ids(socket.assigns.current_scope))
+     |> stream(:clubs, list_clubs(socket.assigns.current_scope))}
   end
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    club = Clubs.get_club!(id)
-    {:ok, _} = Clubs.delete_club(club)
+    scope = socket.assigns.current_scope
+    club = Clubs.get_club!(scope, id)
 
-    {:noreply, stream_delete(socket, :clubs, club)}
+    case Clubs.delete_club(scope, club) do
+      {:ok, _club} ->
+        {:noreply, stream_delete(socket, :clubs, club)}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Only a club owner can delete the club")}
+    end
   end
 
-  defp list_clubs() do
-    Clubs.list_clubs()
+  defp list_clubs(scope) do
+    Clubs.list_clubs(scope)
   end
 end

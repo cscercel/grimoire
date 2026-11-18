@@ -1,59 +1,61 @@
 defmodule Grimoire.ClubsTest do
   use Grimoire.DataCase
 
+  import Grimoire.AccountsFixtures
+
   alias Grimoire.Clubs
+  alias Grimoire.Clubs.{Club, Membership}
 
-  describe "clubs" do
-    alias Grimoire.Clubs.Club
+  setup do
+    owner = user_scope_fixture()
+    other = user_scope_fixture()
+    {:ok, club} = Clubs.create_club(owner, %{name: "Night Readers"})
+    %{owner: owner, other: other, club: club}
+  end
 
-    import Grimoire.ClubsFixtures
+  test "create_club makes the creator an owner", %{owner: owner, club: club} do
+    membership = Repo.get_by!(Membership, club_id: club.id, user_id: owner.user.id)
+    assert membership.role == :owner
+  end
 
-    @invalid_attrs %{name: nil}
+  test "create_club ignores tokens supplied by the caller" do
+    scope = user_scope_fixture()
+    {:ok, club} = Clubs.create_club(scope, %{name: "X", invite_token: "hacked"})
 
-    test "list_clubs/0 returns all clubs" do
-      club = club_fixture()
-      assert Clubs.list_clubs() == [club]
-    end
+    refute club.invite_token == "hacked"
+    assert club.invite_token && club.calendar_token
+  end
 
-    test "get_club!/1 returns the club with given id" do
-      club = club_fixture()
-      assert Clubs.get_club!(club.id) == club
-    end
+  test "create_club with invalid data creates nothing" do
+    scope = user_scope_fixture()
+    before = Repo.aggregate(Club, :count)
 
-    test "create_club/1 with valid data creates a club" do
-      valid_attrs = %{name: "some name"}
+    assert {:error, %Ecto.Changeset{}} = Clubs.create_club(scope, %{name: ""})
+    assert Repo.aggregate(Club, :count) == before
+    assert Repo.aggregate(Membership, :count) == before
+  end
 
-      assert {:ok, %Club{} = club} = Clubs.create_club(valid_attrs)
-      assert club.name == "some name"
-    end
+  test "list_clubs only returns the user's clubs", %{owner: owner, other: other, club: club} do
+    assert [%Club{id: id}] = Clubs.list_clubs(owner)
+    assert id == club.id
+    assert Clubs.list_clubs(other) == []
+  end
 
-    test "create_club/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Clubs.create_club(@invalid_attrs)
-    end
+  test "get_club! raises for non-members", %{other: other, club: club} do
+    assert_raise Ecto.NoResultsError, fn -> Clubs.get_club!(other, club.id) end
+  end
 
-    test "update_club/2 with valid data updates the club" do
-      club = club_fixture()
-      update_attrs = %{name: "some updated name"}
+  test "regular members cannot update or delete", %{other: other, club: club} do
+    Repo.insert!(%Membership{user_id: other.user.id, club_id: club.id, role: :member})
 
-      assert {:ok, %Club{} = club} = Clubs.update_club(club, update_attrs)
-      assert club.name == "some updated name"
-    end
+    assert {:error, :unauthorized} = Clubs.update_club(other, club, %{name: "Hacked"})
+    assert {:error, :unauthorized} = Clubs.delete_club(other, club)
+    assert Repo.get!(Club, club.id).name == "Night Readers"
+  end
 
-    test "update_club/2 with invalid data returns error changeset" do
-      club = club_fixture()
-      assert {:error, %Ecto.Changeset{}} = Clubs.update_club(club, @invalid_attrs)
-      assert club == Clubs.get_club!(club.id)
-    end
-
-    test "delete_club/1 deletes the club" do
-      club = club_fixture()
-      assert {:ok, %Club{}} = Clubs.delete_club(club)
-      assert_raise Ecto.NoResultsError, fn -> Clubs.get_club!(club.id) end
-    end
-
-    test "change_club/1 returns a club changeset" do
-      club = club_fixture()
-      assert %Ecto.Changeset{} = Clubs.change_club(club)
-    end
+  test "owners can update and delete", %{owner: owner, club: club} do
+    assert {:ok, %Club{name: "New Name"}} = Clubs.update_club(owner, club, %{name: "New Name"})
+    assert {:ok, _} = Clubs.delete_club(owner, club)
+    assert Repo.get(Club, club.id) == nil
   end
 end

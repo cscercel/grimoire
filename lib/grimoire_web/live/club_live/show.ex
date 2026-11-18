@@ -14,7 +14,7 @@ defmodule GrimoireWeb.ClubLive.Show do
           <.button navigate={~p"/clubs"}>
             <.icon name="hero-arrow-left" />
           </.button>
-          <.button variant="primary" navigate={~p"/clubs/#{@club}/edit?return_to=show"}>
+          <.button :if={@owner?} variant="primary" navigate={~p"/clubs/#{@club}/edit?return_to=show"}>
             <.icon name="hero-pencil-square" /> Edit club
           </.button>
         </:actions>
@@ -29,9 +29,13 @@ defmodule GrimoireWeb.ClubLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
+    scope = socket.assigns.current_scope
+    club = Clubs.get_club!(scope, id)
+
     {:ok,
      socket
      |> assign(:page_title, "Show Club")
-     |> assign(:club, Clubs.get_club!(id))}
+     |> assign(:club, club)
+     |> assign(:owner?, Clubs.owner?(scope, club))}
   end
 end

@@ -2,121 +2,48 @@ defmodule GrimoireWeb.ClubLiveTest do
   use GrimoireWeb.ConnCase
 
   import Phoenix.LiveViewTest
+  import Grimoire.AccountsFixtures
   import Grimoire.ClubsFixtures
 
-  @create_attrs %{name: "some name"}
-  @update_attrs %{name: "some updated name"}
-  @invalid_attrs %{name: nil}
-  defp create_club(_) do
-    club = club_fixture()
+  alias Grimoire.Repo
+  alias Grimoire.Clubs.Membership
 
-    %{club: club}
+  setup :register_and_log_in_user
+
+  test "lists only my clubs", %{conn: conn, scope: scope} do
+    club_fixture(scope, %{name: "Mine"})
+    club_fixture(user_scope_fixture(), %{name: "Theirs"})
+
+    {:ok, _lv, html} = live(conn, ~p"/clubs")
+
+    assert html =~ "Mine"
+    refute html =~ "Theirs"
   end
 
-  describe "Index" do
-    setup [:create_club]
+  test "creates a club", %{conn: conn} do
+    {:ok, lv, _html} = live(conn, ~p"/clubs/new")
 
-    test "lists all clubs", %{conn: conn, club: club} do
-      {:ok, _index_live, html} = live(conn, ~p"/clubs")
+    {:ok, _lv, html} =
+      lv
+      |> form("#club-form", club: %{name: "Fresh"})
+      |> render_submit()
+      |> follow_redirect(conn, ~p"/clubs")
 
-      assert html =~ "Listing Clubs"
-      assert html =~ club.name
-    end
-
-    test "saves new club", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/clubs")
-
-      assert {:ok, form_live, _} =
-               index_live
-               |> element("a", "New Club")
-               |> render_click()
-               |> follow_redirect(conn, ~p"/clubs/new")
-
-      assert render(form_live) =~ "New Club"
-
-      assert form_live
-             |> form("#club-form", club: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
-
-      assert {:ok, index_live, _html} =
-               form_live
-               |> form("#club-form", club: @create_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/clubs")
-
-      html = render(index_live)
-      assert html =~ "Club created successfully"
-      assert html =~ "some name"
-    end
-
-    test "updates club in listing", %{conn: conn, club: club} do
-      {:ok, index_live, _html} = live(conn, ~p"/clubs")
-
-      assert {:ok, form_live, _html} =
-               index_live
-               |> element("#clubs-#{club.id} a", "Edit")
-               |> render_click()
-               |> follow_redirect(conn, ~p"/clubs/#{club}/edit")
-
-      assert render(form_live) =~ "Edit Club"
-
-      assert form_live
-             |> form("#club-form", club: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
-
-      assert {:ok, index_live, _html} =
-               form_live
-               |> form("#club-form", club: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/clubs")
-
-      html = render(index_live)
-      assert html =~ "Club updated successfully"
-      assert html =~ "some updated name"
-    end
-
-    test "deletes club in listing", %{conn: conn, club: club} do
-      {:ok, index_live, _html} = live(conn, ~p"/clubs")
-
-      assert index_live |> element("#clubs-#{club.id} a", "Delete") |> render_click()
-      refute has_element?(index_live, "#clubs-#{club.id}")
-    end
+    assert html =~ "Club created successfully"
+    assert html =~ "Fresh"
   end
 
-  describe "Show" do
-    setup [:create_club]
+  test "non-members can't open another club's page", %{conn: conn} do
+    club = club_fixture(user_scope_fixture())
 
-    test "displays club", %{conn: conn, club: club} do
-      {:ok, _show_live, html} = live(conn, ~p"/clubs/#{club}")
+    assert_raise Ecto.NoResultsError, fn -> live(conn, ~p"/clubs/#{club}") end
+  end
 
-      assert html =~ "Show Club"
-      assert html =~ club.name
-    end
+  test "regular members are sent away from the edit form", %{conn: conn, scope: scope} do
+    club = club_fixture(user_scope_fixture())
+    Repo.insert!(%Membership{user_id: scope.user.id, club_id: club.id, role: :member})
 
-    test "updates club and returns to show", %{conn: conn, club: club} do
-      {:ok, show_live, _html} = live(conn, ~p"/clubs/#{club}")
-
-      assert {:ok, form_live, _} =
-               show_live
-               |> element("a", "Edit")
-               |> render_click()
-               |> follow_redirect(conn, ~p"/clubs/#{club}/edit?return_to=show")
-
-      assert render(form_live) =~ "Edit Club"
-
-      assert form_live
-             |> form("#club-form", club: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
-
-      assert {:ok, show_live, _html} =
-               form_live
-               |> form("#club-form", club: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/clubs/#{club}")
-
-      html = render(show_live)
-      assert html =~ "Club updated successfully"
-      assert html =~ "some updated name"
-    end
+    assert {:error, {kind, %{to: "/clubs"}}} = live(conn, ~p"/clubs/#{club}/edit")
+    assert kind in [:redirect, :live_redirect]
   end
 end

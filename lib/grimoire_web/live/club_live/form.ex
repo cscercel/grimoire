@@ -36,12 +36,19 @@ defmodule GrimoireWeb.ClubLive.Form do
   defp return_to(_), do: "index"
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    club = Clubs.get_club!(id)
+    scope = socket.assigns.current_scope
+    club = Clubs.get_club!(scope, id)
 
-    socket
-    |> assign(:page_title, "Edit Club")
-    |> assign(:club, club)
-    |> assign(:form, to_form(Clubs.change_club(club)))
+    if Clubs.owner?(scope, club) do
+      socket
+      |> assign(:page_title, "Edit Club")
+      |> assign(:club, club)
+      |> assign(:form, to_form(Clubs.change_club(club)))
+    else
+      socket
+      |> put_flash(:error, "Only a club owner can edit the club")
+      |> push_navigate(to: ~p"/clubs")
+    end
   end
 
   defp apply_action(socket, :new, _params) do
@@ -64,7 +71,7 @@ defmodule GrimoireWeb.ClubLive.Form do
   end
 
   defp save_club(socket, :edit, club_params) do
-    case Clubs.update_club(socket.assigns.club, club_params) do
+    case Clubs.update_club(socket.assigns.current_scope, socket.assigns.club, club_params) do
       {:ok, club} ->
         {:noreply,
          socket
@@ -73,11 +80,14 @@ defmodule GrimoireWeb.ClubLive.Form do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Only a club owner can edit the club")}
     end
   end
 
   defp save_club(socket, :new, club_params) do
-    case Clubs.create_club(club_params) do
+    case Clubs.create_club(socket.assigns.current_scope, club_params) do
       {:ok, club} ->
         {:noreply,
          socket

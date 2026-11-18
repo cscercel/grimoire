@@ -23,7 +23,7 @@ defmodule Grimoire.Clubs do
         join: m in Membership,
         on: m.club_id == c.id,
         where: m.user_id == ^user.id,
-        order_by: [asc, c.name]
+        order_by: c.name
     )
   end
 
@@ -96,8 +96,8 @@ defmodule Grimoire.Clubs do
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_club(%{user: user}, %Club{} = club, attrs) do
-    with :ok <- authorize_owner(user, club) do
+  def update_club(scope, %Club{} = club, attrs) do
+    with :ok <- authorize_owner(scope, club) do
       club
       |> Club.changeset(attrs)
       |> Repo.update()
@@ -116,8 +116,8 @@ defmodule Grimoire.Clubs do
       {:error, %Ecto.Changeset{}}
 
   """
-  def delete_club(%{user: user}, %Club{} = club) do
-    with :ok <- authorize_owner(user, club) do
+  def delete_club(scope, %Club{} = club) do
+    with :ok <- authorize_owner(scope, club) do
       Repo.delete(club)
     end
   end
@@ -143,12 +143,23 @@ defmodule Grimoire.Clubs do
     DateTime.utc_now() |> DateTime.add(7, :day) |> DateTime.truncate(:second)
   end
 
-  defp authorize_owner(user, club) do
-    owner? = Repo.exists?(
+  def owner?(%{user: user}, %Club{} = club) do
+    Repo.exists?(
       from m in Membership,
-      where: m.user_id == ^user.id and m.club_id == ^club.id and m.role == ^:owner
+        where: m.user_id == ^user.id and m.club_id == ^club.id and m.role == ^:owner
     )
+  end
 
-    if owner?, do: :ok else: {:error, :unauthorized}
+  def owned_club_ids(%{user: user}) do
+    from(m in Membership,
+      where: m.user_id == ^user.id and m.role == ^:owner,
+      select: m.club_id
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  defp authorize_owner(scope, club) do
+    if owner?(scope, club), do: :ok, else: {:error, :unauthorized}
   end
 end

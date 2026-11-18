@@ -7,13 +7,10 @@ defmodule Grimoire.ClubsFixtures do
   @doc """
   Generate a club.
   """
-  def club_fixture(attrs \\ %{}) do
-    {:ok, club} =
-      attrs
-      |> Enum.into(%{
-        name: "some name"
-      })
-      |> Grimoire.Clubs.create_club()
+  def club_fixture(scope, attrs \\ %{}) do
+    attrs = Enum.into(attrs, %{name: "some name"})
+
+    {:ok, club} = Grimoire.Clubs.create_club(scope, attrs)
 
     club
   end
